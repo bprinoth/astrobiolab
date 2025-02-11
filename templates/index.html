@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Astrobiology Lab</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css">
+</head>
+<body>
+    <div class="container mt-5">
+        <h1>Astrobiology Lab</h1>
+
+        <div class="form-group">
+            <label for="system_id">System ID</label>
+            <input type="text" class="form-control" id="system_id" placeholder="Enter system ID">
+        </div>
+
+        <button id="retrieve_parameters" class="btn btn-primary">Retrieve Parameters</button>
+        <button id="plot" class="btn btn-success">Plot</button>
+    </div>
+
+    <!-- Loading spinner -->
+    <div id="loading-spinner" class="text-center" style="display: none;">
+        <div class="spinner-border" role="status">
+            <span class="sr-only">Loading...</span>
+        </div>
+        <p>Loading parameters...</p>
+    </div>
+
+    <!-- Parameter display -->
+     <!-- Place for parameter inputs -->
+    <div id="parameter-inputs" class="container mt-5">
+        <div class="row">
+            <div class="col" id="column1"></div>
+            <div class="col" id="column2"></div>
+        </div>
+    </div>
+
+    <!-- Graph display -->
+    <div id="graph" class="container mt-5"></div>
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script>
+        $(document).ready(function() {
+            $("#retrieve_parameters").click(function() {
+                var system_id = $("#system_id").val();
+                if (!system_id) {
+                    alert("Please enter a system ID.");
+                    return;
+                }
+                $("#loading-spinner").show();
+
+                // Clear existing parameter inputs and labels
+                $('#parameter-inputs').find('.form-group').remove();
+                
+                $.ajax({
+                    type: 'POST',
+                    url: '/get_parameters',
+                    data: { system_id: system_id },
+                    success: function(response) {
+                        console.log(response);
+                        $("#loading-spinner").hide();
+
+                        var parameter_inputs = '';
+                        var parameter_order = ['planet_name', 'period', 'ecc', 'omega', 'aRs', 'orbinc', 'RpRs', 'K', 'vsys', 'T14', 'yerr_lc', 'yerr_rv'];
+                        var parameters_per_column = Math.ceil(parameter_order.length / 2);
+
+                        var parameter_labels = {
+                            'planet_name': 'Planet name',
+                            'period': 'Orbital period [days]',
+                            'ecc': 'Eccentricity',
+                            'omega': 'Argument of periastron [deg]',
+                            'aRs': 'Scaled semi-Major Axis a/Rs',
+                            'orbinc': 'Orbital inclination [deg]',
+                            'RpRs': 'Planet Radius to Stellar Radius Ratio',
+                            'K': 'Radial velocity amplitude [km/s]',
+                            'vsys': 'Systemic velocity [km/s]',
+                            'T14': 'Transit duration [h]',
+                            'yerr_lc': 'Uncertainty lightcurve',
+                            'yerr_rv': 'Uncertainty RV [m/s]'
+                        };
+
+                        $.each(parameter_order, function(index, key) {
+                            var value = response[key] || '';
+                            console.log("Original value for " + key + ": " + value);
+                            
+                            if ($.isNumeric(value)) {
+                                var numericValue = parseFloat(value);
+                                if (!isNaN(numericValue)) {
+                                    value = numericValue.toLocaleString('en-US', {
+                                        maximumFractionDigits: 16
+                                    }).replace(/,/g, '');
+                                }
+                            }
+                            
+                            // Determine the target column based on the index
+                            var target_column = Math.floor(index / parameters_per_column) + 1;
+                            var columnId = '#column' + target_column; // Construct column ID
+                            // Append input and label to the respective column
+                            $(columnId).append('<div class="form-group">' +
+                                                    '<label for="' + key + '">' + parameter_labels[key] + '</label>' +
+                                                    '<input type="text" class="form-control" id="' + key + '" value="' + value + '">' +
+                                                '</div>');
+                        });
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('Error:', error);
+                        $("#loading-spinner").hide();
+                    }
+                });
+            });
+
+            $("#plot").click(function() {
+                var inputValues = {};
+                $("#parameter-inputs input").each(function() {
+                    var key = $(this).attr("id");
+                    var value = parseFloat($(this).val()) || 0;
+                    inputValues[key] = value;
+                });
+                
+                $.ajax({
+                    url: "/plot",
+                    type: "POST",
+                    contentType: "application/json",
+                    data: JSON.stringify({ input_values: inputValues }),
+                    success: function(response) {
+                        Plotly.newPlot("graph", response.plot.data, response.plot.layout);
+                    },
+                    error: function() {
+                        alert("Error generating plot.");
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>
